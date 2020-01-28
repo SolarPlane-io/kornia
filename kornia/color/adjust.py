@@ -77,6 +77,8 @@ def adjust_hue_raw(input: torch.Tensor, hue_factor: Union[float, torch.Tensor]) 
     if isinstance(hue_factor, float):
         hue_factor = torch.tensor([hue_factor])
 
+    print(hue_factor)
+    print(pi)
     if ((hue_factor < -pi) | (hue_factor > pi)).any():
         raise ValueError(f"Hue-factor must be in the range [-PI, PI]. Got {hue_factor}")
 
