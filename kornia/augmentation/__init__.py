@@ -1,4 +1,5 @@
 from .augmentation import *
+from .extra import *
 
 
 __all__ = [
@@ -9,5 +10,6 @@ __all__ = [
     "ColorJitter",
     "RandomRotation",
     "RandomCrop",
-    "RandomResizedCrop"
+    "RandomResizedCrop",
+    "random_vflip"
 ]

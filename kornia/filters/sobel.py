@@ -6,8 +6,8 @@ from kornia.filters.kernels import get_spatial_gradient_kernel2d, get_spatial_gr
 from kornia.filters.kernels import normalize_kernel2d
 
 
-class SpatialGradient(nn.Module):
-    r"""Computes the first order image derivative in both x and y using a Sobel
+class SpatialGradient(torch.nn.Module):
+    r"""Computes the first order image derivative in both x and y using a Sobel or Scharr
     operator.
 
     Return:
@@ -18,21 +18,33 @@ class SpatialGradient(nn.Module):
         - Output: :math:`(B, C, 2, H, W)`
 
     Examples:
-        >>> input = torch.rand(1, 3, 4, 4)
-        >>> output = kornia.filters.SpatialGradient()(input)  # 1x3x2x4x4
+        input = torch.rand(1, 3, 4, 4)
+        output = kornia.filters.SpatialGradient()(input)  # 1x3x2x4x4
     """
 
     def __init__(self,
                  mode: str = 'sobel',
                  order: int = 1,
-                 normalized: bool = True) -> None:
+                 normalized: bool = True,
+                 coord: str = "xy",
+                 device: str = "cpu",
+                 dtype: torch.dtype = torch.float) -> None:
         super(SpatialGradient, self).__init__()
         self.normalized: bool = normalized
         self.order: int = order
         self.mode: str = mode
-        self.kernel = get_spatial_gradient_kernel2d(mode, order)
+        self.kernel: torch.Tensor = get_spatial_gradient_kernel2d(mode, order, coord)
         if self.normalized:
             self.kernel = normalize_kernel2d(self.kernel)
+        # Pad with "replicate for spatial dims, but with zeros for channel
+        self.spatial_pad = [self.kernel.size(1) // 2,
+                            self.kernel.size(1) // 2,
+                            self.kernel.size(2) // 2,
+                            self.kernel.size(2) // 2]
+        # Prepare kernel
+        self.kernel: torch.Tensor = self.kernel.to(device).to(dtype).detach()
+        self.kernel: torch.Tensor = self.kernel.unsqueeze(1).unsqueeze(1)
+        self.kernel: torch.Tensor = self.kernel.flip(-3)
         return
 
     def __repr__(self) -> str:
@@ -41,28 +53,21 @@ class SpatialGradient(nn.Module):
             'normalized=' + str(self.normalized) + ', ' + \
             'mode=' + self.mode + ')'
 
-    def forward(self, input: torch.Tensor) -> torch.Tensor:  # type: ignore
-        if not torch.is_tensor(input):
+    def forward(self, inp: torch.Tensor) -> torch.Tensor:  # type: ignore
+        if not torch.is_tensor(inp):
             raise TypeError("Input type is not a torch.Tensor. Got {}"
-                            .format(type(input)))
-        if not len(input.shape) == 4:
+                            .format(type(inp)))
+        if not len(inp.shape) == 4:
             raise ValueError("Invalid input shape, we expect BxCxHxW. Got: {}"
-                             .format(input.shape))
+                             .format(inp.shape))
         # prepare kernel
-        b, c, h, w = input.shape
-        tmp_kernel: torch.Tensor = self.kernel.to(input.device).to(input.dtype).detach()
-        kernel: torch.Tensor = tmp_kernel.unsqueeze(1).unsqueeze(1)
+        b, c, h, w = inp.shape
 
-        # convolve input tensor with sobel kernel
-        kernel_flip: torch.Tensor = kernel.flip(-3)
-        # Pad with "replicate for spatial dims, but with zeros for channel
-        spatial_pad = [self.kernel.size(1) // 2,
-                       self.kernel.size(1) // 2,
-                       self.kernel.size(2) // 2,
-                       self.kernel.size(2) // 2]
+        # convolve inp tensor with sobel kernel
         out_channels: int = 3 if self.order == 2 else 2
-        padded_inp: torch.Tensor = F.pad(input.reshape(b * c, 1, h, w), spatial_pad, 'replicate')[:, :, None]
-        return F.conv3d(padded_inp, kernel_flip, padding=0).view(b, c, out_channels, h, w)
+        padded_inp: torch.Tensor = torch.nn.functional.pad(inp.reshape(b * c, 1, h, w),
+                                                           self.spatial_pad, 'replicate')[:, :, None]
+        return torch.nn.functional.conv3d(padded_inp, self.kernel, padding=0).view(b, c, out_channels, h, w)
 
 
 class SpatialGradient3d(nn.Module):
