@@ -485,7 +485,8 @@ def _apply_rotation(input: torch.Tensor, params: Dict[str, torch.Tensor], return
     dtype: torch.dtype = input.dtype
 
     input = input.unsqueeze(0)
-    input = input.view((-1, (*input.shape[-3:])))
+    # input = input.view((-1, (*input.shape[-3:]))) # Syntax error with Python 3.10
+    input = input.view((-1, *input.shape[-3:]))
     angles: torch.Tensor = params["degrees"].to(device, dtype)
 
     transformed: torch.Tensor = rotate(input, angles).squeeze(0)
